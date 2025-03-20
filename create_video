@@ -91,7 +91,7 @@ def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(128
                 frame_pil = frame_pil.convert('L').convert('RGB') 
                 overlay_resized = overlay_img.resize(frame_pil.size, Image.LANCZOS)
                 # Apply overlay blend mode
-                blended_frame = overlay_blend(frame_pil, overlay_resized)
+                blended_frame = blend_mode_function(frame_pil, overlay_resized)
                 frame = np.array(blended_frame)  # Convert back to numpy array for plotting
             ax.imshow(frame, interpolation='none', origin='upper', extent=[0, frame_size[0], 0, frame_size[1]], aspect='auto', zorder=0)  # Set extent to fill canvas
         else:
@@ -180,18 +180,30 @@ def parse_arguments():
     parser.add_argument('--waveform_color', type=str, default='blue', help='Color of the waveform (default: blue).')
     parser.add_argument('--glow_color', type=str, default='blue', help='Color of the glow around the waveform (default: blue).')
     parser.add_argument('--overlay_image', help='Optional overlay image to blend with the background.')
+    parser.add_argument('--blend_mode',
+       default='multiply',
+       choices=['multiply', 'overlay'],  # Add valid options here
+       help='The blend mode to use (e.g., multiply, overlay). Default is "multiply".')
 
     return parser.parse_args()
 
 def main():
     args = parse_arguments()
 
+    # Dynamically resolve the blend mode function
+    blend_mode_function_name = f"{args.blend_mode}_blend"
+    
     # Parse the frame size from string format
     try:
+        global blend_mode_function
+        blend_mode_function = getattr(sys.modules[__name__], blend_mode_function_name)
         width, height = map(int, args.frame_size.split('x'))
         frame_size = (width, height)
     except ValueError:
         print(f"Invalid frame size format: {args.frame_size}. Expected format is WIDTHxHEIGHT.")
+        sys.exit(1)
+    except AttributeError:
+        print(f"Error: Blend mode function '{blend_mode_function_name}' not found.")
         sys.exit(1)
 
     create_mp4_from_wav_with_waveform(
