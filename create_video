@@ -52,7 +52,7 @@ def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(128
 
     # Check if media_file is a video or image by checking the file extension
     ext = os.path.splitext(media_file)[1].lower()
-    if ext in ['.mp4', '.mov', '.avi']:  # List common video extensions
+    if ext in ['.webm','.mp4', '.mov', '.avi']:  # List common video extensions
         # If it's a video, load and loop it
         background_clip = VideoFileClip(media_file).loop(duration=duration)
         is_video = True
@@ -90,11 +90,9 @@ def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(128
             if has_overlay:
                 fg = overlay_img.resize(frame_pil.size, Image.LANCZOS)
                 if swap_layers is True:
-                  print("still is bg")
                   bg = fg
                   fg = frame_pil
                 else:
-                  print('video is bg')
                   bg = frame_pil
                 if bw:
                   bg = bg.convert('L').convert('RGB') 
