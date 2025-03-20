@@ -222,8 +222,6 @@ def main():
         print(f"Error: Blend mode function '{blend_mode_function_name}' not found.")
         sys.exit(1)
 
-    print(args.disable_bw)
-
     create_mp4_from_wav_with_waveform(
         wav_file=args.audio_file,
         image_file=args.image_file,
