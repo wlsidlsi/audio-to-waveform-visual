@@ -2,6 +2,7 @@
 
 import os
 import sys
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
@@ -153,9 +154,7 @@ def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(128
 
     return video_clip
 
-# Main function to create the video
 def create_mp4_from_wav_with_waveform(wav_file, image_file, output_file, fps=30, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue', overlay_image=None):
-    # Load audio and image
     audio = load_audio(wav_file)
     audio_clip = AudioFileClip(wav_file)
 
@@ -168,19 +167,44 @@ def create_mp4_from_wav_with_waveform(wav_file, image_file, output_file, fps=30,
     # Write to file with AAC codec for audio
     final_clip.write_videofile(output_file, fps=fps, audio_codec='aac', codec="h264_videotoolbox")
 
-# Entry point
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Create an MP4 video with an animated waveform from a WAV file and an image or video background.')
+
+    parser.add_argument('image_file', help='The image or video file to use as the background.')
+    parser.add_argument('audio_file', help='The audio WAV file to generate the waveform from.')
+    parser.add_argument('output_file', help='The output MP4 file.')
+    
+    parser.add_argument('--fps', type=int, default=30, help='Frames per second for the output video (default: 30).')
+    parser.add_argument('--frame_size', type=str, default='1280x720', help='Frame size for the video as WIDTHxHEIGHT (default: 1280x720).')
+    parser.add_argument('--waveform_height', type=int, default=100, help='Height of the waveform in pixels (default: 100).')
+    parser.add_argument('--waveform_color', type=str, default='blue', help='Color of the waveform (default: blue).')
+    parser.add_argument('--glow_color', type=str, default='blue', help='Color of the glow around the waveform (default: blue).')
+    parser.add_argument('--overlay_image', help='Optional overlay image to blend with the background.')
+
+    return parser.parse_args()
+
 def main():
-    if len(sys.argv) < 4:
-        print("Usage: python script.py <image_file> <audio_file> <output_file> [waveform_color] [glow_color]")
+    args = parse_arguments()
+
+    # Parse the frame size from string format
+    try:
+        width, height = map(int, args.frame_size.split('x'))
+        frame_size = (width, height)
+    except ValueError:
+        print(f"Invalid frame size format: {args.frame_size}. Expected format is WIDTHxHEIGHT.")
         sys.exit(1)
 
-    image_file = sys.argv[1]
-    audio_file = sys.argv[2]
-    output_file = sys.argv[3]
-    waveform_color = sys.argv[4] if len(sys.argv) > 4 else 'blue'
-    glow_color = sys.argv[5] if len(sys.argv) > 5 else 'blue'
-    overlay_image = sys.argv[6] if len(sys.argv) > 6 else None
-    create_mp4_from_wav_with_waveform(audio_file, image_file, output_file, frame_size=(1280, 720), waveform_height=100, waveform_color=waveform_color, glow_color=glow_color, overlay_image=overlay_image)
+    create_mp4_from_wav_with_waveform(
+        wav_file=args.audio_file,
+        image_file=args.image_file,
+        output_file=args.output_file,
+        fps=args.fps,
+        frame_size=frame_size,
+        waveform_height=args.waveform_height,
+        waveform_color=args.waveform_color,
+        glow_color=args.glow_color,
+        overlay_image=args.overlay_image
+    )
 
 if __name__ == "__main__":
     main()
