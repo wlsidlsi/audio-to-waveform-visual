@@ -8,11 +8,39 @@ import matplotlib.image as mpimg
 from pydub import AudioSegment
 from moviepy.editor import ImageClip, AudioFileClip, VideoClip, CompositeVideoClip, VideoFileClip
 from moviepy.video.io.bindings import mplfig_to_npimage
-from PIL import Image
+from PIL import Image, ImageEnhance
 
 # Load the audio file
 def load_audio(wav_file):
    return AudioSegment.from_wav(wav_file)
+
+def multiply_blend(background, overlay):
+    """Apply multiply blend mode to background and overlay images."""
+    # Ensure both images are numpy arrays
+    background = np.asarray(background).astype(np.float32) / 255.0
+    overlay = np.asarray(overlay).astype(np.float32) / 255.0
+
+    # Apply multiply blend mode
+    result = background * overlay
+
+    # Rescale back to 0-255 and convert to uint8
+    result = (result * 255).astype(np.uint8)
+    return result
+
+def overlay_blend(background, overlay):
+    """Apply overlay blend mode to background and overlay images."""
+    # Ensure both images are numpy arrays
+    background = np.asarray(background).astype(np.float32) / 255.0
+    overlay = np.asarray(overlay).astype(np.float32) / 255.0
+
+    # Apply overlay blend mode
+    result = np.where(overlay < 0.5, 
+                      2 * background * overlay, 
+                      1 - 2 * (1 - background) * (1 - overlay))
+
+    # Rescale back to 0-255 and convert to uint8
+    result = (result * 255).astype(np.uint8)
+    return result
 
 def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue', overlay_image=None):
     samples = np.array(audio.get_array_of_samples())
@@ -34,7 +62,7 @@ def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(128
 
     # Load the overlay image if provided
     if overlay_image:
-        overlay_img = np.array(Image.open(overlay_image).resize((1280, 720), Image.LANCZOS))
+        overlay_img = Image.open(overlay_image).resize((1280, 720), Image.LANCZOS)
         has_overlay = True
     else:
         has_overlay = False
@@ -55,14 +83,19 @@ def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(128
         # If a video is used, extract the frame for the current time and plot it behind the waveform
         if is_video:
             frame = background_clip.get_frame(t)
+            frame_pil = Image.fromarray(frame)  # Convert video frame to PIL Image
+
+            # Blend the video frame with the overlay image if provided
+            if has_overlay:
+                frame_pil = frame_pil.convert('L').convert('RGB') 
+                overlay_resized = overlay_img.resize(frame_pil.size, Image.LANCZOS)
+                # Apply overlay blend mode
+                blended_frame = overlay_blend(frame_pil, overlay_resized)
+                frame = np.array(blended_frame)  # Convert back to numpy array for plotting
             ax.imshow(frame, interpolation='none', origin='upper', extent=[0, frame_size[0], 0, frame_size[1]], aspect='auto', zorder=0)  # Set extent to fill canvas
         else:
             # Use the static image and plot it behind the waveform
             ax.imshow(img, interpolation='none', origin='upper', extent=[0, frame_size[0], 0, frame_size[1]], aspect='auto', zorder=0)  # Set extent to fill canvas
-
-        # If an overlay image is provided, plot it on top of the background video/image
-        if has_overlay:
-            ax.imshow(overlay_img, interpolation='none', origin='upper', extent=[0, frame_size[0], 0, frame_size[1]], aspect='auto', zorder=1, alpha=0.5)  # Overlay at zorder 1
     
         ax.autoscale(False)
 
