@@ -173,7 +173,7 @@ def create_mp4_from_wav_with_waveform(wav_file, image_file, output_file, fps=30,
     final_clip = waveform_clip.set_audio(audio_clip)
 
     # Write to file with AAC codec for audio
-    final_clip.write_videofile(output_file, fps=fps, audio_codec='aac', codec="h264_videotoolbox")
+    final_clip.write_videofile(output_file, fps=fps, audio_codec='aac', codec="libx264")
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Create an MP4 video with an animated waveform from a WAV file and an image or video background.')
