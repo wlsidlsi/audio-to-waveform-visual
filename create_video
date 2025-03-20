@@ -43,7 +43,7 @@ def overlay_blend(background, overlay):
     result = (result * 255).astype(np.uint8)
     return result
 
-def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue', overlay_image=None, bw=True):
+def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue', overlay_image=None, bw=True, swap_layers=False):
     samples = np.array(audio.get_array_of_samples())
     samples = samples / (np.max(np.abs(samples)) + 1e-10)  # Normalize with epsilon
 
@@ -88,11 +88,18 @@ def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(128
 
             # Blend the video frame with the overlay image if provided
             if has_overlay:
+                fg = overlay_img.resize(frame_pil.size, Image.LANCZOS)
+                if swap_layers is True:
+                  print("still is bg")
+                  bg = fg
+                  fg = frame_pil
+                else:
+                  print('video is bg')
+                  bg = frame_pil
                 if bw:
-                  frame_pil = frame_pil.convert('L').convert('RGB') 
-                overlay_resized = overlay_img.resize(frame_pil.size, Image.LANCZOS)
+                  bg = bg.convert('L').convert('RGB') 
                 # Apply overlay blend mode
-                blended_frame = blend_mode_function(frame_pil, overlay_resized)
+                blended_frame = blend_mode_function(bg, fg)
                 frame = np.array(blended_frame)  # Convert back to numpy array for plotting
             ax.imshow(frame, interpolation='none', origin='upper', extent=[0, frame_size[0], 0, frame_size[1]], aspect='auto', zorder=0)  # Set extent to fill canvas
         else:
@@ -155,13 +162,12 @@ def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(128
 
     return video_clip
 
-def create_mp4_from_wav_with_waveform(wav_file, image_file, output_file, fps=30, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue', overlay_image=None, bw=True):
-    print(bw)
+def create_mp4_from_wav_with_waveform(wav_file, image_file, output_file, fps=30, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue', overlay_image=None, bw=True, swap_layers=False):
     audio = load_audio(wav_file)
     audio_clip = AudioFileClip(wav_file)
 
     # Create the waveform animation synchronized with the audio
-    waveform_clip = create_waveform_clip(audio, image_file, fps=fps, duration=audio_clip.duration, frame_size=frame_size, waveform_height=waveform_height, waveform_color=waveform_color, glow_color=glow_color, overlay_image=overlay_image, bw=bw)
+    waveform_clip = create_waveform_clip(audio, image_file, fps=fps, duration=audio_clip.duration, frame_size=frame_size, waveform_height=waveform_height, waveform_color=waveform_color, glow_color=glow_color, overlay_image=overlay_image, bw=bw, swap_layers=swap_layers)
 
     # Combine the waveform with audio
     final_clip = waveform_clip.set_audio(audio_clip)
@@ -193,6 +199,9 @@ def parse_arguments():
         action='store_false',  # When set, this flag becomes True
         help='Disable black & white conversion before applying the overlay.'
     )
+    parser.add_argument('--swap_overlay_layers',
+      action='store_true',
+      help='The still image overlays the video frame by default.')
 
     return parser.parse_args()
 
@@ -227,7 +236,8 @@ def main():
         waveform_color=args.waveform_color,
         glow_color=args.glow_color,
         overlay_image=args.overlay_image,
-        bw=args.disable_bw if args.disable_bw is not None and args.overlay_image is not None else True
+        bw=args.disable_bw if args.disable_bw is not None and args.overlay_image is not None else True,
+        swap_layers=args.swap_overlay_layers
     )
 
 if __name__ == "__main__":
