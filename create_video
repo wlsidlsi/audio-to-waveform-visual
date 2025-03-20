@@ -1,0 +1,128 @@
+#!/usr/bin/env python3
+
+import sys
+from time import sleep 
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+from pydub import AudioSegment
+from moviepy.editor import ImageClip, AudioFileClip, VideoClip, CompositeVideoClip
+from moviepy.video.io.bindings import mplfig_to_npimage
+from PIL import Image
+
+# Load the audio file
+def load_audio(wav_file):
+   return AudioSegment.from_wav(wav_file)
+
+def create_waveform_clip(audio, image_file, fps=30, duration=10, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue'):
+    samples = np.array(audio.get_array_of_samples())
+    samples = samples / (np.max(np.abs(samples)) + 1e-10)  # Normalize with epsilon
+
+     # Get the number of samples per frame
+    samples_per_frame = int(len(samples) / (fps * duration))
+
+    # Load the background image
+    img = np.array(Image.open(image_file).resize((1280,720), Image.LANCZOS))
+
+    # Set up the figure and axis with the correct size and dpi
+    scale_factor = 2.0  # Define the scaling factor
+    fig, ax = plt.subplots(figsize=(frame_size[0] / 100 * scale_factor, frame_size[1] / 100 * scale_factor), dpi=100 / scale_factor)
+
+    def make_frame(t, glow_scale=1.0):
+        # Get the correct slice of audio samples for the current frame
+        start_idx = int(t * samples_per_frame * fps)
+        end_idx = min(len(samples), start_idx + samples_per_frame)
+        frame_samples = samples[start_idx:end_idx]
+    
+        # Clear the axis for the new frame
+        ax.clear()
+    
+        # Resize the image to 1280x720 without maintaining proportion
+        ax.imshow(img, interpolation='none', origin='upper')#, extent=[0, 1280, 0, 720])
+        ax.autoscale(False)
+ 
+        # Scale the waveform and center it vertically in the frame
+        waveform_center = frame_size[1] / 2  # Middle of the frame
+        scaled_samples = frame_samples * (waveform_height / 2)  # Scale waveform to specified height
+        x_values = np.linspace(0, frame_size[0], len(scaled_samples))
+        
+        # Define base widths and alphas for the glow effect
+        base_glow_widths = [20, 18, 16, 14, 12, 10]  # Base line widths
+        base_glow_alphas = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3]  # Base alpha values
+    
+        # Apply the scale to widths
+        glow_widths = [width * glow_scale for width in base_glow_widths]
+    
+        # Apply the scale to alphas, and constrain them to be between 0 and 1
+        glow_alphas = [min(alpha * glow_scale, 1) for alpha in base_glow_alphas]
+    
+        # Create the glow effect by plotting several layers with increasing width and transparency
+        for glow_width, glow_alpha in zip(glow_widths, glow_alphas):
+            ax.plot(x_values, scaled_samples + waveform_center, lw=glow_width, color=glow_color, alpha=glow_alpha)
+    
+        # Plot the main waveform on top
+        ax.plot(x_values, scaled_samples + waveform_center, lw=2, color=waveform_color)
+
+        # Remove all axis elements to ensure a clean plot
+        ax.set_axis_off()
+
+        # Set the size of the figure explicitly to match the output frame size
+        fig.set_size_inches(frame_size[0] / 100, frame_size[1] / 100)  # Size in inches, assuming 100 dpi
+    
+        # Set aspect ratio to prevent stretching and maintain the correct size
+        ax.set_aspect(aspect='auto')
+    
+        # Adjust the plot to fill the entire figure without adding extra space
+        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+
+        # Remove any automatic margins and set the limits explicitly
+        ax.margins(0)
+        ax.set_xlim([0, frame_size[0]])
+
+        # Use tight layout to further ensure no padding
+        plt.tight_layout(pad=0)
+    
+        # Return the figure as an image with no border or padding
+        return mplfig_to_npimage(fig)
+
+    video_clip = VideoClip(make_frame, duration=duration)
+
+    # Debug: Check if the video clip is being created
+    if video_clip is None:
+        print("Failed to create the video clip.")
+    else:
+        print("Video clip created successfully.")
+
+    return video_clip
+
+# Main function to create the video
+def create_mp4_from_wav_with_waveform(wav_file, image_file, output_file, fps=30, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue'):
+    # Load audio and image
+    audio = load_audio(wav_file)
+    audio_clip = AudioFileClip(wav_file)
+
+    # Create the waveform animation synchronized with the audio
+    waveform_clip = create_waveform_clip(audio, image_file, fps=fps, duration=audio_clip.duration, frame_size=frame_size, waveform_height=waveform_height, waveform_color=waveform_color, glow_color=glow_color)
+
+    # Combine the waveform with audio
+    final_clip = waveform_clip.set_audio(audio_clip)
+
+    # Write to file with AAC codec for audio
+    final_clip.write_videofile(output_file, fps=fps, audio_codec='aac', codec="h264_videotoolbox")
+
+# Entry point
+def main():
+    if len(sys.argv) < 4:
+        print("Usage: python script.py <image_file> <audio_file> <output_file> [waveform_color] [glow_color]")
+        sys.exit(1)
+
+    image_file = sys.argv[1]
+    audio_file = sys.argv[2]
+    output_file = sys.argv[3]
+    waveform_color = sys.argv[4] if len(sys.argv) > 4 else 'blue'
+    glow_color = sys.argv[5] if len(sys.argv) > 5 else 'blue'
+
+    create_mp4_from_wav_with_waveform(audio_file, image_file, output_file, frame_size=(1280, 720), waveform_height=100, waveform_color=waveform_color, glow_color=glow_color)
+
+if __name__ == "__main__":
+    main()
