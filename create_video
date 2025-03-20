@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
+import os
 import sys
-from time import sleep 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from pydub import AudioSegment
-from moviepy.editor import ImageClip, AudioFileClip, VideoClip, CompositeVideoClip
+from moviepy.editor import ImageClip, AudioFileClip, VideoClip, CompositeVideoClip, VideoFileClip
 from moviepy.video.io.bindings import mplfig_to_npimage
 from PIL import Image
 
@@ -14,15 +14,30 @@ from PIL import Image
 def load_audio(wav_file):
    return AudioSegment.from_wav(wav_file)
 
-def create_waveform_clip(audio, image_file, fps=30, duration=10, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue'):
+def create_waveform_clip(audio, media_file, fps=30, duration=10, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue', overlay_image=None):
     samples = np.array(audio.get_array_of_samples())
     samples = samples / (np.max(np.abs(samples)) + 1e-10)  # Normalize with epsilon
 
-     # Get the number of samples per frame
+    # Get the number of samples per frame
     samples_per_frame = int(len(samples) / (fps * duration))
 
-    # Load the background image
-    img = np.array(Image.open(image_file).resize((1280,720), Image.LANCZOS))
+    # Check if media_file is a video or image by checking the file extension
+    ext = os.path.splitext(media_file)[1].lower()
+    if ext in ['.mp4', '.mov', '.avi']:  # List common video extensions
+        # If it's a video, load and loop it
+        background_clip = VideoFileClip(media_file).loop(duration=duration)
+        is_video = True
+    else:
+        # If it's an image, load it as a still frame
+        img = np.array(Image.open(media_file).resize((1280, 720), Image.LANCZOS))
+        is_video = False
+
+    # Load the overlay image if provided
+    if overlay_image:
+        overlay_img = np.array(Image.open(overlay_image).resize((1280, 720), Image.LANCZOS))
+        has_overlay = True
+    else:
+        has_overlay = False
 
     # Set up the figure and axis with the correct size and dpi
     scale_factor = 2.0  # Define the scaling factor
@@ -36,11 +51,21 @@ def create_waveform_clip(audio, image_file, fps=30, duration=10, frame_size=(128
     
         # Clear the axis for the new frame
         ax.clear()
+
+        # If a video is used, extract the frame for the current time and plot it behind the waveform
+        if is_video:
+            frame = background_clip.get_frame(t)
+            ax.imshow(frame, interpolation='none', origin='upper', extent=[0, frame_size[0], 0, frame_size[1]], aspect='auto', zorder=0)  # Set extent to fill canvas
+        else:
+            # Use the static image and plot it behind the waveform
+            ax.imshow(img, interpolation='none', origin='upper', extent=[0, frame_size[0], 0, frame_size[1]], aspect='auto', zorder=0)  # Set extent to fill canvas
+
+        # If an overlay image is provided, plot it on top of the background video/image
+        if has_overlay:
+            ax.imshow(overlay_img, interpolation='none', origin='upper', extent=[0, frame_size[0], 0, frame_size[1]], aspect='auto', zorder=1, alpha=0.5)  # Overlay at zorder 1
     
-        # Resize the image to 1280x720 without maintaining proportion
-        ax.imshow(img, interpolation='none', origin='upper')#, extent=[0, 1280, 0, 720])
         ax.autoscale(False)
- 
+
         # Scale the waveform and center it vertically in the frame
         waveform_center = frame_size[1] / 2  # Middle of the frame
         scaled_samples = frame_samples * (waveform_height / 2)  # Scale waveform to specified height
@@ -58,10 +83,10 @@ def create_waveform_clip(audio, image_file, fps=30, duration=10, frame_size=(128
     
         # Create the glow effect by plotting several layers with increasing width and transparency
         for glow_width, glow_alpha in zip(glow_widths, glow_alphas):
-            ax.plot(x_values, scaled_samples + waveform_center, lw=glow_width, color=glow_color, alpha=glow_alpha)
+            ax.plot(x_values, scaled_samples + waveform_center, lw=glow_width, color=glow_color, alpha=glow_alpha, zorder=2)  # Glow effect at zorder 2
     
         # Plot the main waveform on top
-        ax.plot(x_values, scaled_samples + waveform_center, lw=2, color=waveform_color)
+        ax.plot(x_values, scaled_samples + waveform_center, lw=2, color=waveform_color, zorder=3)  # Main waveform at zorder 3
 
         # Remove all axis elements to ensure a clean plot
         ax.set_axis_off()
@@ -96,13 +121,13 @@ def create_waveform_clip(audio, image_file, fps=30, duration=10, frame_size=(128
     return video_clip
 
 # Main function to create the video
-def create_mp4_from_wav_with_waveform(wav_file, image_file, output_file, fps=30, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue'):
+def create_mp4_from_wav_with_waveform(wav_file, image_file, output_file, fps=30, frame_size=(1280, 720), waveform_height=100, waveform_color='blue', glow_color='blue', overlay_image=None):
     # Load audio and image
     audio = load_audio(wav_file)
     audio_clip = AudioFileClip(wav_file)
 
     # Create the waveform animation synchronized with the audio
-    waveform_clip = create_waveform_clip(audio, image_file, fps=fps, duration=audio_clip.duration, frame_size=frame_size, waveform_height=waveform_height, waveform_color=waveform_color, glow_color=glow_color)
+    waveform_clip = create_waveform_clip(audio, image_file, fps=fps, duration=audio_clip.duration, frame_size=frame_size, waveform_height=waveform_height, waveform_color=waveform_color, glow_color=glow_color, overlay_image=overlay_image)
 
     # Combine the waveform with audio
     final_clip = waveform_clip.set_audio(audio_clip)
@@ -121,8 +146,8 @@ def main():
     output_file = sys.argv[3]
     waveform_color = sys.argv[4] if len(sys.argv) > 4 else 'blue'
     glow_color = sys.argv[5] if len(sys.argv) > 5 else 'blue'
-
-    create_mp4_from_wav_with_waveform(audio_file, image_file, output_file, frame_size=(1280, 720), waveform_height=100, waveform_color=waveform_color, glow_color=glow_color)
+    overlay_image = sys.argv[6] if len(sys.argv) > 6 else None
+    create_mp4_from_wav_with_waveform(audio_file, image_file, output_file, frame_size=(1280, 720), waveform_height=100, waveform_color=waveform_color, glow_color=glow_color, overlay_image=overlay_image)
 
 if __name__ == "__main__":
     main()
